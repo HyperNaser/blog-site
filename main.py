@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 import models
 from database import Base, engine, get_db
-from schemas import PostCreate, PostResponse, UserCreate, UserResponse
+from schemas import PostCreate, PostResponse, PostUpdate, UserCreate, UserResponse
 
 Base.metadata.create_all(bind=engine)
 
@@ -53,7 +53,7 @@ def post_page(request: Request, post_id: int, db: Annotated[Session, Depends(get
     
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post not found")
 
-@app.get("/users/{user_id}/posts", response_model=list[PostResponse])
+@app.get("/users/{user_id}/posts", response_model=list[PostResponse], include_in_schema=False)
 def user_posts_page(request: Request, user_id: int, db: Annotated[Session, Depends(get_db)]):
     result = db.execute(select(models.User).where(models.User.id == user_id))
     user = result.scalars().first()
@@ -145,6 +145,45 @@ def get_post(post_id: int, db: Annotated[Session, Depends(get_db)]):
         return post
     
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post not found")
+
+@app.put("/api/posts/{post_id}", response_model=PostResponse)
+def update_post_full(post_id: int, post_data: PostCreate, db: Annotated[Session, Depends(get_db)]):
+    result = db.execute(select(models.Post).where(models.Post.id == post_id))
+
+    post = result.scalars().first()
+    
+    if not post:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post not found")
+    
+    if post_data.user_id != post.user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not authorized to update this post")
+    
+    post.title = post_data.title
+    post.content = post_data.content
+    
+    db.commit()
+    db.refresh(post)
+    
+    return post
+    
+@app.patch("/api/posts/{post_id}", response_model=PostResponse)
+def update_post_partial(post_id: int, post_data: PostUpdate, db: Annotated[Session, Depends(get_db)]):
+    result = db.execute(select(models.Post).where(models.Post.id == post_id))
+
+    post = result.scalars().first()
+    
+    if not post:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post not found")
+    
+    update_data = post_data.model_dump(exclude_unset=True)
+    
+    for field, value in update_data.items():
+        setattr(post, field, value)
+    
+    db.commit()
+    db.refresh(post)
+    
+    return post
 
 @app.post("/api/posts", response_model=PostResponse, status_code=status.HTTP_201_CREATED)
 def create_post(post: PostCreate, db: Annotated[Session, Depends(get_db)]):
