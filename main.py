@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 import models
 from database import Base, engine, get_db
-from schemas import PostCreate, PostResponse, PostUpdate, UserCreate, UserResponse
+from schemas import PostCreate, PostResponse, PostUpdate, UserCreate, UserResponse, UserUpdate
 
 Base.metadata.create_all(bind=engine)
 
@@ -117,6 +117,86 @@ def get_user(user_id: int, db: Annotated[Session, Depends(get_db)]):
         return user
     
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+@app.patch("/api/users/{user_id}", response_model=UserResponse)
+def update_user(user_id: int, user_data: UserUpdate, db: Annotated[Session, Depends(get_db)]):
+    result = db.execute(select(models.User).where(models.User.id == user_id))
+    
+    user = result.scalars().first()
+    
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    
+    if user_data.username is not None and user_data.username != user.username:
+        result = db.execute(select(models.User).where(models.User.username == user_data.username))
+        
+        existing_user = result.scalars().one_or_none()
+
+        if existing_user:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Username already exists"
+            )
+    
+    if user_data.email is not None and user_data.email != user.email:
+        result = db.execute(select(models.User).where(models.User.email == user_data.email))
+        
+        existing_user = result.scalars().one_or_none()
+
+        if existing_user:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email already exists"
+            )
+    
+    update_data = user_data.model_dump(exclude_unset=True)
+
+    for field, value in update_data.items():
+        setattr(user, field, value)
+    
+    db.commit()
+    db.refresh(user)
+    
+    return user
+        
+@app.put("/api/users/{user_id}", response_model=UserResponse)
+def update_user_full(user_id: int, user_data: UserCreate, db: Annotated[Session, Depends(get_db)]):
+    result = db.execute(select(models.User).where(models.User.id == user_id))
+    
+    user = result.scalars().first()
+    
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    
+    if user_data.username != user.username:
+        result = db.execute(select(models.User).where(models.User.username == user_data.username))
+        
+        existing_user = result.scalars().one_or_none()
+
+        if existing_user:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Username already exists"
+            )
+    
+    if user_data.email != user.email:
+        result = db.execute(select(models.User).where(models.User.email == user_data.email))
+        
+        existing_user = result.scalars().one_or_none()
+
+        if existing_user:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email already exists"
+            )
+    
+    for field, value in user_data.model_dump().items():
+        setattr(user, field, value)
+
+    db.commit()
+    db.refresh(user)
+    
+    return user
 
 @app.get("/api/users/{user_id}/posts", response_model=list[PostResponse])
 def get_user_posts(user_id: int, db: Annotated[Session, Depends(get_db)]):
