@@ -4,7 +4,10 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, HTTPException, status, Depends
 from fastapi.exceptions import RequestValidationError
-from fastapi.exception_handlers import http_exception_handler, request_validation_exception_handler
+from fastapi.exception_handlers import (
+    http_exception_handler,
+    request_validation_exception_handler,
+)
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -17,6 +20,7 @@ import models
 from database import Base, engine, get_db
 from routers import posts, users
 
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     # startup
@@ -25,6 +29,7 @@ async def lifespan(_app: FastAPI):
     yield
     # shutdown
     await engine.dispose()
+
 
 app = FastAPI(lifespan=lifespan)
 
@@ -37,62 +42,82 @@ app.mount("/media", StaticFiles(directory="media"), name="media")
 
 templates = Jinja2Templates(directory="templates")
 
+
 @app.get("/", include_in_schema=False, name="home")
 async def homepage(request: Request, db: Annotated[AsyncSession, Depends(get_db)]):
-    result = await db.execute(select(models.Post).options(selectinload(models.Post.author)).limit(10).order_by(models.Post.date_posted.desc()))
+    result = await db.execute(
+        select(models.Post)
+        .options(selectinload(models.Post.author))
+        .limit(10)
+        .order_by(models.Post.date_posted.desc())
+    )
     posts = result.scalars().all()
 
     return templates.TemplateResponse(
-        request=request, 
-        name="home.html", 
-        context={
-        "title": "Home",
-        "posts": posts
-    })
+        request=request, name="home.html", context={"title": "Home", "posts": posts}
+    )
+
 
 @app.get("/users/{user_id}/posts", include_in_schema=False)
-async def user_posts_page(request: Request, user_id: int, db: Annotated[AsyncSession, Depends(get_db)]):
+async def user_posts_page(
+    request: Request, user_id: int, db: Annotated[AsyncSession, Depends(get_db)]
+):
     result = await db.execute(select(models.User).where(models.User.id == user_id))
     user = result.scalars().first()
-    
+
     if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-    
-    result = await db.execute(select(models.Post).options(selectinload(models.Post.author)).where(models.Post.user_id == user_id).order_by(models.Post.date_posted.desc()))
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
+        )
+
+    result = await db.execute(
+        select(models.Post)
+        .options(selectinload(models.Post.author))
+        .where(models.Post.user_id == user_id)
+        .order_by(models.Post.date_posted.desc())
+    )
     posts = result.scalars().all()
-    
+
     return templates.TemplateResponse(
         request=request,
         name="user_posts.html",
-        context={
-            "user": user,
-            "title": f"{user.username}'s Posts",
-            "posts": posts
-        }
+        context={"user": user, "title": f"{user.username}'s Posts", "posts": posts},
     )
 
+
 @app.get("/posts/{post_id}", include_in_schema=False)
-async def post_page(request: Request, post_id: int, db: Annotated[AsyncSession, Depends(get_db)]):
-    result = await db.execute(select(models.Post).options(selectinload(models.Post.author)).where(models.Post.id == post_id))
+async def post_page(
+    request: Request, post_id: int, db: Annotated[AsyncSession, Depends(get_db)]
+):
+    result = await db.execute(
+        select(models.Post)
+        .options(selectinload(models.Post.author))
+        .where(models.Post.id == post_id)
+    )
     post = result.scalars().first()
-    
+
     if post:
         return templates.TemplateResponse(
-            request=request, 
-            name="post.html", 
-            context={
-                "title": post.title[:25],
-                "post": post
-            })
-    
+            request=request,
+            name="post.html",
+            context={"title": post.title[:25], "post": post},
+        )
+
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post not found")
 
+
 @app.exception_handler(StarletteHTTPException)
-async def general_http_exception_handler(request: Request, exception: StarletteHTTPException):
+async def general_http_exception_handler(
+    request: Request, exception: StarletteHTTPException
+):
     if request.url.path.startswith("/api"):
         return await http_exception_handler(request=request, exc=exception)
-    
-    message = exception.detail if exception.detail else "An error occurred. Please check your request and try again."
+
+    message = (
+        exception.detail
+        if exception.detail
+        else "An error occurred. Please check your request and try again."
+    )
 
     return templates.TemplateResponse(
         request=request,
@@ -100,23 +125,28 @@ async def general_http_exception_handler(request: Request, exception: StarletteH
         context={
             "status_code": exception.status_code,
             "title": exception.status_code,
-            "message": message
+            "message": message,
         },
-        status_code=exception.status_code
+        status_code=exception.status_code,
     )
-    
+
+
 @app.exception_handler(RequestValidationError)
-async def validation_exception_handler(request: Request, exception: RequestValidationError):
+async def validation_exception_handler(
+    request: Request, exception: RequestValidationError
+):
     if request.url.path.startswith("/api"):
-        return await request_validation_exception_handler(request=request, exc=exception)
-    
+        return await request_validation_exception_handler(
+            request=request, exc=exception
+        )
+
     return templates.TemplateResponse(
         request=request,
         name="error.html",
         context={
             "status_code": status.HTTP_422_UNPROCESSABLE_CONTENT,
             "title": status.HTTP_422_UNPROCESSABLE_CONTENT,
-            "message": "Invalid request. Please check your input and try again."
+            "message": "Invalid request. Please check your input and try again.",
         },
-        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
     )
