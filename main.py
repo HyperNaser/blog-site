@@ -54,7 +54,7 @@ async def homepage(request: Request, db: Annotated[AsyncSession, Depends(get_db)
     posts = result.scalars().all()
 
     return templates.TemplateResponse(
-        request=request, name="home.html", context={"title": "Home", "posts": posts}
+        request=request, name="home.jinja", context={"title": "Home", "posts": posts}
     )
 
 
@@ -80,7 +80,7 @@ async def user_posts_page(
 
     return templates.TemplateResponse(
         request=request,
-        name="user_posts.html",
+        name="user_posts.jinja",
         context={"user": user, "title": f"{user.username}'s Posts", "posts": posts},
     )
 
@@ -99,7 +99,7 @@ async def post_page(
     if post:
         return templates.TemplateResponse(
             request=request,
-            name="post.html",
+            name="post.jinja",
             context={"title": post.title[:25], "post": post},
         )
 
@@ -121,7 +121,7 @@ async def general_http_exception_handler(
 
     return templates.TemplateResponse(
         request=request,
-        name="error.html",
+        name="error.jinja",
         context={
             "status_code": exception.status_code,
             "title": exception.status_code,
@@ -142,7 +142,7 @@ async def validation_exception_handler(
 
     return templates.TemplateResponse(
         request=request,
-        name="error.html",
+        name="error.jinja",
         context={
             "status_code": status.HTTP_422_UNPROCESSABLE_CONTENT,
             "title": status.HTTP_422_UNPROCESSABLE_CONTENT,
