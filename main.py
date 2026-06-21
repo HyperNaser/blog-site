@@ -106,6 +106,24 @@ async def post_page(
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post not found")
 
 
+@app.get("/login", include_in_schema=False)
+async def login_page(request: Request):
+    return templates.TemplateResponse(
+        request,
+        "login.jinja",
+        {"title": "Login"},
+    )
+
+
+@app.get("/register", include_in_schema=False)
+async def register_page(request: Request):
+    return templates.TemplateResponse(
+        request,
+        "register.jinja",
+        {"title": "Register"},
+    )
+
+
 @app.exception_handler(StarletteHTTPException)
 async def general_http_exception_handler(
     request: Request, exception: StarletteHTTPException
