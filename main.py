@@ -12,13 +12,12 @@ from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
-import models
 from database import Base, engine, get_db
 from routers import posts, users
+
+from services import post_service, user_service
 
 
 @asynccontextmanager
@@ -45,13 +44,7 @@ templates = Jinja2Templates(directory="templates")
 
 @app.get("/", include_in_schema=False, name="home")
 async def homepage(request: Request, db: Annotated[AsyncSession, Depends(get_db)]):
-    result = await db.execute(
-        select(models.Post)
-        .options(selectinload(models.Post.author))
-        .limit(10)
-        .order_by(models.Post.date_posted.desc())
-    )
-    posts = result.scalars().all()
+    posts = await post_service.get_all_posts(db)
 
     return templates.TemplateResponse(
         request=request, name="home.jinja", context={"title": "Home", "posts": posts}
@@ -62,21 +55,13 @@ async def homepage(request: Request, db: Annotated[AsyncSession, Depends(get_db)
 async def user_posts_page(
     request: Request, user_id: int, db: Annotated[AsyncSession, Depends(get_db)]
 ):
-    result = await db.execute(select(models.User).where(models.User.id == user_id))
-    user = result.scalars().first()
-
-    if not user:
+    user = await user_service.get_user_by_id(db, user_id)
+    if user is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
         )
 
-    result = await db.execute(
-        select(models.Post)
-        .options(selectinload(models.Post.author))
-        .where(models.Post.user_id == user_id)
-        .order_by(models.Post.date_posted.desc())
-    )
-    posts = result.scalars().all()
+    posts = await user_service.get_user_posts(db, user_id, bypass_user_check=True)
 
     return templates.TemplateResponse(
         request=request,
@@ -89,12 +74,7 @@ async def user_posts_page(
 async def post_page(
     request: Request, post_id: int, db: Annotated[AsyncSession, Depends(get_db)]
 ):
-    result = await db.execute(
-        select(models.Post)
-        .options(selectinload(models.Post.author))
-        .where(models.Post.id == post_id)
-    )
-    post = result.scalars().first()
+    post = await post_service.get_post_by_id(db, post_id)
 
     if post:
         return templates.TemplateResponse(

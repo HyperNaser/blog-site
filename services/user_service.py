@@ -97,14 +97,15 @@ async def delete_user(db: AsyncSession, user_id: int):
     await db.commit()
 
 
-async def get_user_posts(db: AsyncSession, user_id: int) -> Sequence[models.Post]:
+async def get_user_posts(db: AsyncSession, user_id: int, bypass_user_check: bool = False) -> Sequence[models.Post]:
     """
     Fetches user posts from database, raises an UserNotFoundError Exception if user doesn't exist
     """
-    user = await get_user_by_id(db, user_id)
+    if not bypass_user_check:
+        user = await get_user_by_id(db, user_id)
 
-    if not user:
-        raise UserNotFoundError(identifier=user_id)
+        if not user:
+            raise UserNotFoundError(identifier=user_id)
 
     result = await db.execute(
         select(models.Post)
