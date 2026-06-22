@@ -2,18 +2,22 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
-from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
-import models
+from exceptions import UnauthorizedCredentialsException
+
 from database import get_db
 from schemas import PostResponse, UserCreate, UserPublic, UserPrivate, UserUpdate, Token
 
-from auth import create_access_token, hash_password, verify_access_token, oauth2_scheme, verify_password
+from auth import (
+    create_access_token,
+    verify_access_token,
+    oauth2_scheme,
+    verify_password,
+)
 
 from config import settings
-
+from services import user_service
 from datetime import timedelta
 
 router = APIRouter()
@@ -21,195 +25,122 @@ router = APIRouter()
 
 @router.post("", response_model=UserPrivate, status_code=status.HTTP_201_CREATED)
 async def create_user(user: UserCreate, db: Annotated[AsyncSession, Depends(get_db)]):
-    result = await db.execute(
-        select(models.User).where(func.lower(models.User.username) == user.username.lower())
-    )
-
-    existing_user = result.scalars().one_or_none()
-
-    if existing_user:
+    try:
+        return await user_service.add_user(db, user)
+    except user_service.UsernameTakenError:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Username already exists"
         )
 
-    result = await db.execute(
-        select(models.User).where(func.lower(models.User.email) == user.email.lower())
-    )
-
-    existing_user = result.scalars().one_or_none()
-
-    if existing_user:
+    except user_service.EmailTakenError:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Email already exists"
         )
 
-    new_user = models.User()
-    new_user.username = user.username
-    new_user.email = user.email.lower()
-    new_user.password_hash = hash_password(user.password)
+    except user_service.UserDomainError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Malformed request"
+        )
 
-    db.add(new_user)
-    await db.commit()
-    await db.refresh(new_user)
-
-    return new_user
 
 @router.post("/token", response_model=Token)
-async def login(form_data: Annotated[OAuth2PasswordRequestForm, Depends(OAuth2PasswordRequestForm)],
-                db: Annotated[AsyncSession, Depends(get_db)]):
-    result = await db.execute(
-        select(models.User).where(
-            func.lower(models.User.email) == form_data.username.lower()
-        ),
-    )
-    
-    user = result.scalars().first()
-    
+async def login(
+    form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    email_input = form_data.username.lower()
+    user = await user_service.get_user_by_email(db, email_input)
+
     if not user or not verify_password(form_data.password, user.password_hash):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password",
-            headers={"WWW-Authenticate": "Bearer"}
-        )
-    
+        raise UnauthorizedCredentialsException(detail="Incorrect email or password")
+
     expires_delta = timedelta(minutes=settings.access_token_expire_duration)
     access_token = create_access_token(
-        data={"sub": str(user.id)},
-        expires_delta=expires_delta
+        data={"sub": str(user.id)}, expires_delta=expires_delta
     )
-    
+
     return Token(access_token=access_token, token_type="bearer")
+
 
 @router.get("/me", response_model=UserPrivate)
 async def get_current_user(
     token: Annotated[str, Depends(oauth2_scheme)],
-    db: Annotated[AsyncSession, Depends(get_db)]
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
     user_id = verify_access_token(token)
-    
+
     if user_id is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired token",
-            headers={"WWW-Authenticate": "Bearer"}
-        )
-    
+        raise UnauthorizedCredentialsException(detail="Invalid or expired token")
+
     try:
         user_id_int = int(user_id)
-        
+
     except (TypeError, ValueError):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired token",
-            headers={"WWW-Authenticate": "Bearer"}
-        )
-    
-    result = await db.execute(
-        select(models.User).where(models.User.id == user_id_int)
-    )
-    user = result.scalars().first()
+        raise UnauthorizedCredentialsException(detail="Invalid or expired token")
+
+    user = await user_service.get_user_by_id(db, user_id_int)
+
     if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found",
-            headers={"WWW-Authenticate": "Bearer"}
-        )
-    
+        raise UnauthorizedCredentialsException(detail="User not found")
+
     return user
 
 
 @router.get("/{user_id}", response_model=UserPublic)
 async def get_user(user_id: int, db: Annotated[AsyncSession, Depends(get_db)]):
-    result = await db.execute(select(models.User).where(models.User.id == user_id))
+    user = await user_service.get_user_by_id(db, user_id)
 
-    user = result.scalars().first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
+        )
 
-    if user:
-        return user
-
-    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    return user
 
 
 @router.patch("/{user_id}", response_model=UserPrivate)
 async def update_user(
     user_id: int, user_data: UserUpdate, db: Annotated[AsyncSession, Depends(get_db)]
 ):
-    result = await db.execute(select(models.User).where(models.User.id == user_id))
-
-    user = result.scalars().first()
+    user = await user_service.get_user_by_id(db, user_id)
 
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
         )
 
-    if user_data.username is not None and user_data.username.lower() != user.username.lower():
-        result = await db.execute(
-            select(models.User).where(func.lower(models.User.username) == user_data.username.lower())
+    try:
+        return await user_service.update_user(db, user=user, update_data=user_data)
+    except user_service.UsernameTakenError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Username already exists",
         )
-
-        existing_user = result.scalars().one_or_none()
-
-        if existing_user:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Username already exists",
-            )
-
-    if user_data.email is not None and user_data.email.lower() != user.email.lower():
-        result = await db.execute(
-            select(models.User).where(func.lower(models.User.email) == user_data.email.lower())
+    except user_service.EmailTakenError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Email already exists"
         )
-
-        existing_user = result.scalars().one_or_none()
-
-        if existing_user:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail="Email already exists"
-            )
-
-    if user_data.username is not None:
-        user.username = user_data.username
-    if user_data.email is not None:
-        user.email = user_data.email.lower()
-    if user_data.image_file is not None:
-        user.image_file = user_data.image_file
-
-    await db.commit()
-    await db.refresh(user)
-
-    return user
+    except user_service.UserDomainError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Malformed request"
+        )
 
 
 @router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_user(user_id: int, db: Annotated[AsyncSession, Depends(get_db)]):
-    result = await db.execute(select(models.User).where(models.User.id == user_id))
-    user = result.scalars().first()
-
-    if not user:
+    try:
+        await user_service.delete_user(db, user_id)
+    except user_service.UserNotFoundError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
         )
-
-    await db.delete(user)
-    await db.commit()
 
 
 @router.get("/{user_id}/posts", response_model=list[PostResponse])
 async def get_user_posts(user_id: int, db: Annotated[AsyncSession, Depends(get_db)]):
-    result = await db.execute(select(models.User).where(models.User.id == user_id))
-    user = result.scalars().first()
-
-    if not user:
+    try:
+        return await user_service.get_user_posts(db, user_id)
+    except user_service.UserNotFoundError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
         )
-
-    result = await db.execute(
-        select(models.Post)
-        .options(selectinload(models.Post.author))
-        .where(models.Post.user_id == user_id)
-        .order_by(models.Post.date_posted.desc())
-    )
-    posts = result.scalars().all()
-    return posts

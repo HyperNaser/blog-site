@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, Index, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from database import Base
@@ -10,7 +10,7 @@ class User(Base):
     __tablename__ = "users"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    username: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
+    username: Mapped[str] = mapped_column(String(50), nullable=False)
     email: Mapped[str] = mapped_column(String(120), unique=True, nullable=False)
     password_hash: Mapped[str] = mapped_column(String(200), nullable=False)
     image_file: Mapped[str | None] = mapped_column(
@@ -19,6 +19,14 @@ class User(Base):
 
     posts: Mapped[list['Post']] = relationship(
         back_populates="author", cascade="all, delete-orphan"
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_users_username_case_insensitive",
+            func.lower(username),
+            unique=True
+        ),
     )
 
     @property
