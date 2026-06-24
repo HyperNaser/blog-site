@@ -9,7 +9,7 @@ from exceptions import UnauthorizedCredentialsException
 from database import get_db
 from schemas import PostResponse, UserCreate, UserPublic, UserPrivate, UserUpdate, Token
 
-from auth import (
+from security.auth import (
     CurrentUser,
     create_access_token,
 )

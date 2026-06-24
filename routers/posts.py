@@ -7,7 +7,7 @@ from database import get_db
 from schemas import PostCreate, PostResponse, PostUpdate
 
 from services import post_service
-from auth import CurrentUser
+from security.auth import CurrentUser
 
 router = APIRouter()
 
