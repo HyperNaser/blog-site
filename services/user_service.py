@@ -5,7 +5,7 @@ from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy import func
 from schemas import UserCreate, UserUpdate
-from auth import hash_password
+from security.passwords import hash_password
 import models
 
 class UserDomainError(Exception):

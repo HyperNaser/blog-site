@@ -4,18 +4,31 @@ from sqlalchemy.orm import selectinload
 from typing import Sequence
 from schemas import PostUpdate, PostCreate
 import models
+from auth import CurrentUser
+
 
 class PostDomainError(Exception):
     """Base exception for all post-related domain errors."""
+
     pass
+
 
 class PostNotFoundError(PostDomainError):
     def __init__(self, identifier: str | int):
         super().__init__(f"Post with identifier '{identifier}' could not be found.")
 
 
-async def add_post(db: AsyncSession, post: PostCreate):
+class PermissionDeniedError(PostDomainError):
+    def __init__(self, reason: str | None = None):
+        msg = "User is not authorized to perform this action."
+        if reason:
+            msg = f"{msg} {reason}"
+        super().__init__(msg)
+
+
+async def add_post(db: AsyncSession, current_user: CurrentUser, post: PostCreate):
     new_post = models.Post(**post.model_dump())
+    new_post.user_id = current_user.id
 
     db.add(new_post)
     await db.commit()
@@ -24,7 +37,22 @@ async def add_post(db: AsyncSession, post: PostCreate):
     return new_post
 
 
-async def update_post(db: AsyncSession, post: models.Post, update_data: PostUpdate) -> models.Post: 
+async def update_post(
+    db: AsyncSession, post_id: int, current_user: CurrentUser, update_data: PostUpdate
+) -> models.Post:
+    """
+    Updates post if found, raises a PostNotFoundError Exception if not.
+
+    Raises a PermissionDeniedError Exception if user is not the owner of post.
+    """
+    post = await get_post_by_id(db, post_id)
+
+    if post is None:
+        raise PostNotFoundError(identifier=post_id)
+
+    if post.user_id != current_user.id:
+        raise PermissionDeniedError(reason="User is not the post owner.")
+
     for field, value in update_data.model_dump(exclude_unset=True).items():
         setattr(post, field, value)
 
@@ -34,11 +62,19 @@ async def update_post(db: AsyncSession, post: models.Post, update_data: PostUpda
     return post
 
 
-async def delete_post(db: AsyncSession, post_id: int): 
+async def delete_post(db: AsyncSession, current_user: CurrentUser, post_id: int):
+    """
+    Deletes post if found, raises a PostNotFoundError Exception if not.
+
+    Raises a PermissionDeniedError Exception if user is not the owner of post.
+    """
     post = await get_post_by_id(db, post_id)
 
     if not post:
         raise PostNotFoundError(identifier=post_id)
+
+    if post.user_id != current_user.id:
+        raise PermissionDeniedError(reason="User is not the post owner.")
 
     await db.delete(post)
     await db.commit()
