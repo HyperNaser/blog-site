@@ -9,16 +9,10 @@ from exceptions import UnauthorizedCredentialsException
 from database import get_db
 from schemas import PostResponse, UserCreate, UserPublic, UserPrivate, UserUpdate, Token
 
-from security.auth import (
-    CurrentUser,
-    create_access_token,
-)
+from services.auth_service import CurrentUser
+from services import auth_service
 
-from security.passwords import verify_password
-
-from config import settings
 from services import user_service
-from datetime import timedelta
 
 router = APIRouter()
 
@@ -48,18 +42,12 @@ async def login(
     form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    email_input = form_data.username.lower()
-    user = await user_service.get_user_by_email(db, email_input)
-
-    if not user or not verify_password(form_data.password, user.password_hash):
+    try:
+        return await auth_service.authenticate_user_and_create_token(
+            db, email=form_data.username, password=form_data.password
+        )
+    except auth_service.IncorrectCredentialsError:
         raise UnauthorizedCredentialsException(detail="Incorrect email or password")
-
-    expires_delta = timedelta(minutes=settings.access_token_expire_duration)
-    access_token = create_access_token(
-        data={"sub": str(user.id)}, expires_delta=expires_delta
-    )
-
-    return Token(access_token=access_token, token_type="bearer")
 
 
 @router.get("/me", response_model=UserPrivate)

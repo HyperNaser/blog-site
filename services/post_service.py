@@ -4,7 +4,7 @@ from sqlalchemy.orm import selectinload
 from typing import Sequence
 from schemas import PostUpdate, PostCreate
 import models
-from security.auth import CurrentUser
+from services.auth_service import CurrentUser
 
 
 class PostDomainError(Exception):
