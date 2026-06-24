@@ -1,10 +1,10 @@
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import jwt
 from fastapi.security import OAuth2PasswordBearer
 
 from config import settings
-from typing import Any
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/users/token")
 

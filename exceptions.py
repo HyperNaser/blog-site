@@ -1,5 +1,5 @@
-from fastapi.exceptions import HTTPException
 from fastapi import status
+from fastapi.exceptions import HTTPException
 
 
 class UnauthorizedCredentialsException(HTTPException):

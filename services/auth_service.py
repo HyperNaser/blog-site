@@ -1,16 +1,18 @@
-from sqlalchemy.ext.asyncio import AsyncSession
-from fastapi import Depends
-from schemas import Token
-from services import user_service
 from datetime import timedelta
-from config import settings
-from security.auth import create_access_token, verify_access_token, oauth2_scheme
-from security.passwords import verify_password
-from exceptions import UnauthorizedCredentialsException
 from typing import Annotated
-from database import get_db
+
+from fastapi import Depends
+from sqlalchemy.ext.asyncio import AsyncSession
 
 import models
+from config import settings
+from database import get_db
+from exceptions import UnauthorizedCredentialsException
+from schemas import Token
+from security.auth import create_access_token, oauth2_scheme, verify_access_token
+from security.passwords import verify_password
+from services import user_service
+
 
 class AuthDomainError(Exception):
     """Base exception for all auth-related domain errors."""

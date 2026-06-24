@@ -1,12 +1,15 @@
 from typing import Sequence
+
+from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
-from sqlalchemy import func
+
+import models
 from schemas import UserCreate, UserUpdate
 from security.passwords import hash_password
-import models
+
 
 class UserDomainError(Exception):
     """Base exception for all user-related domain errors."""

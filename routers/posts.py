@@ -5,7 +5,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
 from schemas import PostCreate, PostResponse, PostUpdate
-
 from services import post_service
 from services.auth_service import CurrentUser
 

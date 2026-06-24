@@ -1,9 +1,11 @@
+from typing import Sequence
+
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
-from typing import Sequence
-from schemas import PostUpdate, PostCreate
+
 import models
+from schemas import PostCreate, PostUpdate
 from services.auth_service import CurrentUser
 
 
