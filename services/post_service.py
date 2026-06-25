@@ -5,27 +5,9 @@ from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 
 import models
+from exceptions import PermissionDeniedError, PostNotFoundError
 from schemas import PostCreate, PostUpdate
 from services.auth_service import CurrentUser
-
-
-class PostDomainError(Exception):
-    """Base exception for all post-related domain errors."""
-
-    pass
-
-
-class PostNotFoundError(PostDomainError):
-    def __init__(self, identifier: str | int):
-        super().__init__(f"Post with identifier '{identifier}' could not be found.")
-
-
-class PermissionDeniedError(PostDomainError):
-    def __init__(self, reason: str | None = None):
-        msg = "User is not authorized to perform this action."
-        if reason:
-            msg = f"{msg} {reason}"
-        super().__init__(msg)
 
 
 async def add_post(db: AsyncSession, current_user: CurrentUser, post: PostCreate):
