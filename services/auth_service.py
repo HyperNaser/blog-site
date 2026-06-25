@@ -7,21 +7,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import models
 from config import settings
 from database import get_db
-from exceptions import UnauthorizedCredentialsException
+from exceptions import IncorrectCredentialsError, InvalidTokenError
 from schemas import Token
 from security.auth import create_access_token, oauth2_scheme, verify_access_token
 from security.passwords import verify_password
 from services import user_service
 
-
-class AuthDomainError(Exception):
-    """Base exception for all auth-related domain errors."""
-
-    pass
-
-class IncorrectCredentialsError(AuthDomainError):
-    def __init__(self, reason: str) -> None:
-        super().__init__(reason)
 
 async def authenticate_user_and_create_token(
     db: AsyncSession, email: str, password: str
@@ -48,17 +39,17 @@ async def get_current_user(
     user_id = verify_access_token(token)
 
     if user_id is None:
-        raise UnauthorizedCredentialsException(detail="Invalid or expired token")
+        raise InvalidTokenError(detail="Invalid or expired token")
 
     try:
         user_id_int = int(user_id)
-    except (TypeError, ValueError):
-        raise UnauthorizedCredentialsException(detail="Invalid or expired token")
+    except (TypeError, ValueError) as err:
+        raise InvalidTokenError(detail="Invalid or expired token") from err
 
     user = await user_service.get_user_by_id(db, user_id_int)
 
     if not user:
-        raise UnauthorizedCredentialsException(detail="User not found")
+        raise InvalidTokenError(detail="User not found")
 
     return user
 

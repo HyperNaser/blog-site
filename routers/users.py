@@ -6,7 +6,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import settings
 from database import get_db
-from exceptions import UnauthorizedCredentialsException
+from exceptions import (
+    EmailTakenError,
+    ImageNotFoundError,
+    ImageSizeTooLargeError,
+    IncorrectCredentialsError,
+    InvalidImageError,
+    UserDomainError,
+    UsernameTakenError,
+    UserNotFoundError,
+)
 from schemas import PostResponse, Token, UserCreate, UserPrivate, UserPublic, UserUpdate
 from services import auth_service, user_service
 from services.auth_service import CurrentUser
@@ -18,17 +27,17 @@ router = APIRouter()
 async def create_user(user: UserCreate, db: Annotated[AsyncSession, Depends(get_db)]):
     try:
         return await user_service.add_user(db, user)
-    except user_service.UsernameTakenError:
+    except UsernameTakenError:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Username already exists"
         )
 
-    except user_service.EmailTakenError:
+    except EmailTakenError:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Email already exists"
         )
 
-    except user_service.UserDomainError:
+    except UserDomainError:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Malformed request"
         )
@@ -43,8 +52,8 @@ async def login(
         return await auth_service.authenticate_user_and_create_token(
             db, email=form_data.username, password=form_data.password
         )
-    except auth_service.IncorrectCredentialsError:
-        raise UnauthorizedCredentialsException(detail="Incorrect email or password")
+    except IncorrectCredentialsError as err:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(err))
 
 
 @router.get("/me", response_model=UserPrivate)
@@ -81,16 +90,16 @@ async def update_user(
         return await user_service.update_user(
             db, user=current_user, update_data=user_data
         )
-    except user_service.UsernameTakenError:
+    except UsernameTakenError:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Username already exists",
         )
-    except user_service.EmailTakenError:
+    except EmailTakenError:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Email already exists"
         )
-    except user_service.UserDomainError:
+    except UserDomainError:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Malformed request"
         )
@@ -110,7 +119,7 @@ async def delete_user(
 
     try:
         await user_service.delete_user(db, user_id)
-    except user_service.UserNotFoundError:
+    except UserNotFoundError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
         )
@@ -120,7 +129,7 @@ async def delete_user(
 async def get_user_posts(user_id: int, db: Annotated[AsyncSession, Depends(get_db)]):
     try:
         return await user_service.get_user_posts(db, user_id)
-    except user_service.UserNotFoundError:
+    except UserNotFoundError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
         )
@@ -143,13 +152,13 @@ async def upload_profile_picture(
 
     try:
         return await user_service.update_profile_picture(db, current_user, content)
-    except user_service.ImageSizeTooLargeError as err:
+    except ImageSizeTooLargeError as err:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"File too large. Maximum size is {settings.max_upload_size_bytes // (1024 * 1024)}MB",
         ) from err
 
-    except user_service.InvalidImageError as err:
+    except InvalidImageError as err:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid image file. Please upload a valid image.",
@@ -170,7 +179,7 @@ async def delete_user_picture(
 
     try:
         return await user_service.delete_profile_picture(db, current_user)
-    except user_service.ImageNotFoundError as err:
+    except ImageNotFoundError as err:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="No profile picture to delete",

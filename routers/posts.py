@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
+from exceptions import PermissionDeniedError, PostNotFoundError
 from schemas import PostCreate, PostResponse, PostUpdate
 from services import post_service
 from services.auth_service import CurrentUser
@@ -42,11 +43,11 @@ async def update_post_full(
             current_user=current_user,
             update_data=PostUpdate(**post_data.model_dump()),
         )
-    except post_service.PostNotFoundError:
+    except PostNotFoundError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Post not found"
         )
-    except post_service.PermissionDeniedError:
+    except PermissionDeniedError:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You are not authorized to update this post",
@@ -64,11 +65,11 @@ async def update_post_partial(
         return await post_service.update_post(
             db, post_id=post_id, current_user=current_user, update_data=post_data
         )
-    except post_service.PostNotFoundError:
+    except PostNotFoundError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Post not found"
         )
-    except post_service.PermissionDeniedError:
+    except PermissionDeniedError:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You are not authorized to update this post",
@@ -92,11 +93,11 @@ async def delete_post(
 ):
     try:
         await post_service.delete_post(db, current_user, post_id)
-    except post_service.PostNotFoundError:
+    except PostNotFoundError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Post not found"
         )
-    except post_service.PermissionDeniedError:
+    except PermissionDeniedError:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You are not authorized to delete this post",

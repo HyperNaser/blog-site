@@ -10,47 +10,18 @@ from sqlalchemy.orm import selectinload
 
 import models
 from config import settings
+from exceptions import (
+    EmailTakenError,
+    ImageNotFoundError,
+    ImageSizeTooLargeError,
+    InvalidImageError,
+    UserDomainError,
+    UsernameTakenError,
+    UserNotFoundError,
+)
 from image_utils import delete_profile_image, process_profile_image
 from schemas import UserCreate, UserUpdate
 from security.passwords import hash_password
-
-
-class UserDomainError(Exception):
-    """Base exception for all user-related domain errors."""
-
-    pass
-
-
-class UsernameTakenError(UserDomainError):
-    def __init__(self, username: str):
-        super().__init__(f"The username '{username}' is already taken.")
-
-
-class EmailTakenError(UserDomainError):
-    def __init__(self, email: str):
-        super().__init__(f"The email '{email}' is already registered.")
-
-
-class UserNotFoundError(UserDomainError):
-    def __init__(self, identifier: str | int):
-        super().__init__(f"User with identifier '{identifier}' could not be found.")
-
-
-class InvalidImageError(UserDomainError):
-    def __init__(self) -> None:
-        super().__init__("Invalid image file. Please upload a valid image.")
-
-
-class ImageSizeTooLargeError(UserDomainError):
-    def __init__(self) -> None:
-        super().__init__(
-            f"File too large. Maximum size is {settings.max_upload_size_bytes // (1024 * 1024)}MB"
-        )
-
-
-class ImageNotFoundError(UserDomainError):
-    def __init__(self, detail: str | None = "Image not found.") -> None:
-        super().__init__(detail)
 
 
 async def add_user(db: AsyncSession, user: UserCreate) -> models.User:
@@ -120,7 +91,9 @@ async def update_profile_picture(
     db: AsyncSession, user: models.User, file_content: bytes
 ) -> models.User:
     if len(file_content) > settings.max_upload_size_bytes:
-        raise ImageSizeTooLargeError()
+        raise ImageSizeTooLargeError(
+            max_mb=settings.max_upload_size_bytes * 1024 * 1024
+        )
 
     try:
         new_filename = await asyncio.to_thread(process_profile_image, file_content)
@@ -133,10 +106,10 @@ async def update_profile_picture(
     try:
         await db.commit()
         await db.refresh(user)
-    except Exception as e:
+    except Exception as err:
         await db.rollback()
         await asyncio.to_thread(delete_profile_image, new_filename)
-        raise UserDomainError("Failed to save image metadata to the database.") from e
+        raise UserDomainError("Failed to save image metadata to the database.") from err
 
     if old_filename:
         await asyncio.to_thread(delete_profile_image, old_filename)
