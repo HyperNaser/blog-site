@@ -1,8 +1,12 @@
+from fastapi import status
+
 from exceptions.base import DomainError
 
 
 class AuthDomainError(DomainError):
     """Base exception for all auth-related domain errors."""
+
+    http_status = status.HTTP_401_UNAUTHORIZED
 
     pass
 
