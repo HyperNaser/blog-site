@@ -8,7 +8,13 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from core import app, templates
-from exceptions import InvalidTokenError
+from exceptions import DomainError, InvalidTokenError
+
+
+# function that does nothing, used for importing in order to ensure this file gets interpreted and registers the handlers
+def register_exception_handlers():
+    return
+
 
 # Framework Exceptions
 
@@ -62,6 +68,25 @@ async def validation_exception_handler(
 
 
 # Domain Exceptions
+
+
+@app.exception_handler(DomainError)
+async def domain_error_handler(request: Request, exc: DomainError):
+    status_code = type(exc).http_status
+    if is_api_request(request):
+        return JSONResponse(status_code=status_code, content={"detail": str(exc)})
+
+    title = type(exc).__name__.replace("Error", "").replace("_", " ").title()
+    return templates.TemplateResponse(
+        request=request,
+        name="error.jinja",
+        context={
+            "status_code": status_code,
+            "title": title,
+            "message": str(exc),
+        },
+        status_code=status_code,
+    )
 
 
 @app.exception_handler(InvalidTokenError)

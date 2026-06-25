@@ -1,3 +1,5 @@
+from fastapi import status
+
 from exceptions.base import DomainError
 
 
@@ -18,6 +20,8 @@ class EmailTakenError(UserDomainError):
 
 
 class UserNotFoundError(UserDomainError):
+    http_status = status.HTTP_404_NOT_FOUND
+
     def __init__(self, identifier: str | int):
         super().__init__(f"User with identifier '{identifier}' could not be found.")
 
