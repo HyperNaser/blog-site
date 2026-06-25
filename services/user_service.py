@@ -7,25 +7,31 @@ from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 
 import models
+from image_utils import delete_profile_image
 from schemas import UserCreate, UserUpdate
 from security.passwords import hash_password
 
 
 class UserDomainError(Exception):
     """Base exception for all user-related domain errors."""
+
     pass
+
 
 class UsernameTakenError(UserDomainError):
     def __init__(self, username: str):
         super().__init__(f"The username '{username}' is already taken.")
 
+
 class EmailTakenError(UserDomainError):
     def __init__(self, email: str):
         super().__init__(f"The email '{email}' is already registered.")
 
+
 class UserNotFoundError(UserDomainError):
     def __init__(self, identifier: str | int):
         super().__init__(f"User with identifier '{identifier}' could not be found.")
+
 
 async def add_user(db: AsyncSession, user: UserCreate) -> models.User:
     """
@@ -45,15 +51,17 @@ async def add_user(db: AsyncSession, user: UserCreate) -> models.User:
         return new_user
     except IntegrityError as e:
         await db.rollback()
-        
+
         error_msg = str(e.orig).lower()
-        
+
         if "username" in error_msg:
             raise UsernameTakenError(user.username)
         if "email" in error_msg:
             raise EmailTakenError(user.email)
-        
-        raise UserDomainError("Failed to add user due to a database constraint violation.")
+
+        raise UserDomainError(
+            "Failed to add user due to a database constraint violation."
+        )
 
 
 async def update_user(
@@ -67,8 +75,6 @@ async def update_user(
         user.username = update_data.username
     if update_data.email is not None:
         user.email = update_data.email.lower()
-    if update_data.image_file is not None:
-        user.image_file = update_data.image_file
 
     try:
         await db.commit()
@@ -77,15 +83,17 @@ async def update_user(
         return user
     except IntegrityError as e:
         await db.rollback()
-        
+
         error_msg = str(e.orig).lower()
-        
+
         if "username" in error_msg:
             raise UsernameTakenError(update_data.username or "The requested username")
         if "email" in error_msg:
             raise EmailTakenError(update_data.email or "The requested email")
-        
-        raise UserDomainError("Failed to update user due to a database constraint violation.")
+
+        raise UserDomainError(
+            "Failed to update user due to a database constraint violation."
+        )
 
 
 async def delete_user(db: AsyncSession, user_id: int):
@@ -96,11 +104,18 @@ async def delete_user(db: AsyncSession, user_id: int):
     if not user:
         raise UserNotFoundError(identifier=user_id)
 
+    old_filename = user.image_file
+
     await db.delete(user)
     await db.commit()
 
+    if old_filename:
+        delete_profile_image(old_filename)
 
-async def get_user_posts(db: AsyncSession, user_id: int, bypass_user_check: bool = False) -> Sequence[models.Post]:
+
+async def get_user_posts(
+    db: AsyncSession, user_id: int, bypass_user_check: bool = False
+) -> Sequence[models.Post]:
     """
     Fetches user posts from database, raises an UserNotFoundError Exception if user doesn't exist
     """
