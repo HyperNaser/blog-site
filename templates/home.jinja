@@ -18,4 +18,74 @@
       </div>
     </article>
   {% endfor %}
+
+  <nav aria-label="Page navigation">
+    {% set total_pages = (total // limit) + (1 if total % limit else 0) %}
+    {% set current_page = (skip // limit) + 1 %}
+
+    {% set half = pages_shown_window // 2 %}
+
+    {% set start_page = current_page - half %}
+    {% set end_page = current_page + half %}
+
+    {% if start_page < 1 %}
+      {% set end_page = end_page + (1 - start_page) %}
+      {% set start_page = 1 %}
+    {% endif %}
+
+    {% if end_page > total_pages %}
+      {% set start_page = start_page - (end_page - total_pages) %}
+      {% set end_page = total_pages %}
+      {% if start_page < 1 %}{% set start_page = 1 %}{% endif %}
+    {% endif %}
+    <ul class="pagination">
+
+      <li class="page-item {% if skip == 0 %}disabled{% endif %}">
+        <a class="page-link"
+          href="{% if skip == 0 %}#{% else %}{{ url_for('home') }}?skip={{ skip - limit }}&limit={{ limit }}{% endif %}"
+          aria-label="Previous" {% if skip == 0 %}aria-disabled="true" tabindex="-1" {% endif %}>
+          Previous
+        </a>
+      </li>
+
+      {# First page + leading ellipsis #}
+      {% if start_page > 1 %}
+        <li class="page-item">
+          <a class="page-link" href="{{ url_for('home') }}?skip=0&limit={{ limit }}">1</a>
+        </li>
+        {% if start_page > 2 %}
+          <li class="page-item disabled"><span class="page-link">…</span></li>
+        {% endif %}
+      {% endif %}
+
+      {# Middle window #}
+      {% for p in range(start_page, end_page + 1) %}
+        {% set p_skip = (p - 1) * limit %}
+        <li class="page-item {% if p == current_page %}active{% endif %}">
+          <a class="page-link" href="{{ url_for('home') }}?skip={{ p_skip }}&limit={{ limit }}">{{ p }}</a>
+        </li>
+      {% endfor %}
+
+      {# Trailing ellipsis + last page #}
+      {% if end_page < total_pages %}
+        {% if end_page < total_pages - 1 %}
+          <li class="page-item disabled"><span class="page-link">…</span></li>
+        {% endif %}
+        <li class="page-item">
+          <a class="page-link"
+            href="{{ url_for('home') }}?skip={{ (total_pages - 1) * limit }}&limit={{ limit }}">{{ total_pages }}</a>
+        </li>
+      {% endif %}
+
+      <li class="page-item {% if not has_more %}disabled{% endif %}">
+        <a class="page-link"
+          href="{% if not has_more %}#{% else %}{{ url_for('home') }}?skip={{ skip + limit }}&limit={{ limit }}{% endif %}"
+          aria-label="Next" {% if not has_more %}aria-disabled="true" tabindex="-1" {% endif %}>
+          Next
+        </a>
+      </li>
+
+    </ul>
+  </nav>
+
 {% endblock content %}

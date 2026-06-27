@@ -1,19 +1,24 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from config import settings
 from database import get_db
-from schemas import PostCreate, PostResponse, PostUpdate
+from schemas import PaginatedPostsResponse, PostCreate, PostResponse, PostUpdate
 from services import post_service
 from services.auth_service import CurrentUser
 
 router = APIRouter()
 
 
-@router.get("", response_model=list[PostResponse])
-async def get_posts(db: Annotated[AsyncSession, Depends(get_db)]):
-    return await post_service.get_all_posts(db)
+@router.get("", response_model=PaginatedPostsResponse)
+async def get_posts(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    skip: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=settings.max_limit)] = settings.posts_per_page,
+):
+    return await post_service.get_paginated_posts(db, skip, limit)
 
 
 @router.get(
