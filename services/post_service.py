@@ -1,12 +1,11 @@
-from typing import Sequence
-
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 
 import models
+from config import settings
 from exceptions import PermissionDeniedError, PostNotFoundError
-from schemas import PostCreate, PostUpdate
+from schemas import PaginatedPostsResponse, PostCreate, PostResponse, PostUpdate
 from services.auth_service import CurrentUser
 
 
@@ -77,14 +76,31 @@ async def get_post_by_id(db: AsyncSession, post_id: int) -> models.Post | None:
     return result.scalars().one_or_none()
 
 
-async def get_all_posts(db: AsyncSession) -> Sequence[models.Post]:
+async def get_paginated_posts(
+    db: AsyncSession, skip: int = 0, limit: int = settings.posts_per_page
+) -> PaginatedPostsResponse:
     """
-    Fetches all posts in descending order.
+    Fetches limit number of posts after skip in descending order.
     """
+    count_result = await db.execute(select(func.count()).select_from(models.Post))
+    total = count_result.scalar() or 0
+
     result = await db.execute(
         select(models.Post)
         .options(selectinload(models.Post.author))
         .order_by(models.Post.date_posted.desc())
+        .offset(skip)
+        .limit(limit)
     )
 
-    return result.scalars().all()
+    posts = result.scalars().all()
+
+    has_more = skip + len(posts) < total
+
+    return PaginatedPostsResponse(
+        posts=[PostResponse.model_validate(post) for post in posts],
+        total=total,
+        skip=skip,
+        limit=limit,
+        has_more=has_more,
+    )

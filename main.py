@@ -1,8 +1,9 @@
 from typing import Annotated
 
-from fastapi import Depends, HTTPException, Request, status
+from fastapi import Depends, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from config import settings
 from core import app, templates
 from database import get_db
 from handlers.exception_handlers import register_exception_handlers
@@ -16,17 +17,36 @@ app.include_router(router=posts.router, prefix="/api/posts", tags=["posts"])
 
 
 @app.get("/", include_in_schema=False, name="home")
-async def homepage(request: Request, db: Annotated[AsyncSession, Depends(get_db)]):
-    posts = await post_service.get_all_posts(db)
+async def homepage(
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    skip: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=settings.max_limit)] = settings.posts_per_page,
+):
+    paginated_posts_response = await post_service.get_paginated_posts(db, skip, limit)
 
     return templates.TemplateResponse(
-        request=request, name="home.jinja", context={"title": "Home", "posts": posts}
+        request=request,
+        name="home.jinja",
+        context={
+            "title": "Home",
+            "posts": paginated_posts_response.posts,
+            "pages_shown_window": settings.pages_shown_window,
+            "total": paginated_posts_response.total,
+            "skip": paginated_posts_response.skip,
+            "limit": paginated_posts_response.limit,
+            "has_more": paginated_posts_response.has_more,
+        },
     )
 
 
 @app.get("/users/{user_id}/posts", include_in_schema=False)
 async def user_posts_page(
-    request: Request, user_id: int, db: Annotated[AsyncSession, Depends(get_db)]
+    request: Request,
+    user_id: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    skip: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=settings.max_limit)] = settings.posts_per_page,
 ):
     user = await user_service.get_user_by_id(db, user_id)
     if user is None:
@@ -34,12 +54,23 @@ async def user_posts_page(
             status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
         )
 
-    posts = await user_service.get_user_posts(db, user_id, bypass_user_check=True)
+    paginated_posts_response = await user_service.get_user_posts(
+        db, user_id, skip, limit, bypass_user_check=True
+    )
 
     return templates.TemplateResponse(
         request=request,
         name="user_posts.jinja",
-        context={"user": user, "title": f"{user.username}'s Posts", "posts": posts},
+        context={
+            "user": user,
+            "title": f"{user.username}'s Posts",
+            "posts": paginated_posts_response.posts,
+            "pages_shown_window": settings.pages_shown_window,
+            "total": paginated_posts_response.total,
+            "skip": paginated_posts_response.skip,
+            "limit": paginated_posts_response.limit,
+            "has_more": paginated_posts_response.has_more,
+        },
     )
 
 

@@ -1,9 +1,10 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from config import settings
 from database import get_db
 from schemas import PostResponse, Token, UserCreate, UserPrivate, UserPublic, UserUpdate
 from services import auth_service, user_service
@@ -117,8 +118,13 @@ async def delete_user(
         404: {"description": "User not found"},
     },
 )
-async def get_user_posts(user_id: int, db: Annotated[AsyncSession, Depends(get_db)]):
-    return await user_service.get_user_posts(db, user_id)
+async def get_user_posts(
+    user_id: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    skip: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=settings.max_limit)] = settings.posts_per_page,
+):
+    return await user_service.get_user_posts(db, user_id, skip, limit)
 
 
 @router.patch(

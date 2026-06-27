@@ -1,11 +1,9 @@
 import asyncio
-from typing import Sequence
 
 from PIL import UnidentifiedImageError
-from sqlalchemy import func
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 
 import models
@@ -20,7 +18,7 @@ from exceptions import (
     UserNotFoundError,
 )
 from image_utils import delete_profile_image, process_profile_image
-from schemas import UserCreate, UserUpdate
+from schemas import PaginatedPostsResponse, PostResponse, UserCreate, UserUpdate
 from security.passwords import hash_password
 
 
@@ -150,8 +148,12 @@ async def delete_user(db: AsyncSession, user_id: int):
 
 
 async def get_user_posts(
-    db: AsyncSession, user_id: int, bypass_user_check: bool = False
-) -> Sequence[models.Post]:
+    db: AsyncSession,
+    user_id: int,
+    skip: int = 0,
+    limit: int = settings.posts_per_page,
+    bypass_user_check: bool = False,
+) -> PaginatedPostsResponse:
     """
     Fetches user posts from database, raises an UserNotFoundError Exception if user doesn't exist
     """
@@ -161,15 +163,33 @@ async def get_user_posts(
         if not user:
             raise UserNotFoundError(identifier=user_id)
 
+    count_result = await db.execute(
+        select(func.count())
+        .select_from(models.Post)
+        .where(models.Post.user_id == user_id)
+    )
+    total = count_result.scalar() or 0
+
     result = await db.execute(
         select(models.Post)
         .options(selectinload(models.Post.author))
         .where(models.Post.user_id == user_id)
         .order_by(models.Post.date_posted.desc())
+        .offset(skip)
+        .limit(limit)
     )
 
     posts = result.scalars().all()
-    return posts
+
+    has_more = skip + len(posts) < total
+
+    return PaginatedPostsResponse(
+        posts=[PostResponse.model_validate(post) for post in posts],
+        total=total,
+        skip=skip,
+        limit=limit,
+        has_more=has_more,
+    )
 
 
 async def get_user_by_email(db: AsyncSession, email: str) -> models.User | None:

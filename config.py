@@ -14,4 +14,8 @@ class Settings(BaseSettings):
 
     max_upload_size_bytes: int = 5 * 1024 * 1024
 
+    posts_per_page: int = 10
+    max_limit: int = 50
+    pages_shown_window: int = 3
+
 settings = Settings() #type: ignore[call-arg]
