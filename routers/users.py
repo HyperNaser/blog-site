@@ -13,7 +13,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import settings
-from database import get_db
+from core.database import get_db
 from email_utils import send_password_reset_email
 from schemas import (
     ChangePasswordRequest,

@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import models
 from config import settings
-from database import get_db
+from core.database import get_db
 from exceptions import (
     IncorrectCredentialsError,
     InvalidResetTokenError,

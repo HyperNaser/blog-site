@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import settings
-from database import get_db
+from core.database import get_db
 from schemas import PaginatedPostsResponse, PostCreate, PostResponse, PostUpdate
 from services import post_service
 from services.auth_service import CurrentUser
