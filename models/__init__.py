@@ -2,7 +2,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from core.database import Base
 from models.post import Post
-from models.token import PasswordResetToken
+from models.auth import PasswordResetToken
 from models.user import User
 
 __all__ = ["Base", "User", "Post", "PasswordResetToken"]
