@@ -7,7 +7,7 @@ from core.database import Base
 
 if TYPE_CHECKING:
     from models.post import Post
-    from models.token import PasswordResetToken
+    from models.auth import PasswordResetToken
 
 
 class User(Base):
