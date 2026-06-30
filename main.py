@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import settings
 from core import app, templates
-from database import get_db
+from core.database import get_db
 from handlers.exception_handlers import register_exception_handlers
 from routers import posts, users
 from services import post_service, user_service
