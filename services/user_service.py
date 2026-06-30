@@ -1,7 +1,8 @@
 import asyncio
+from datetime import UTC, datetime, timedelta
 
 from PIL import UnidentifiedImageError
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -19,6 +20,7 @@ from exceptions import (
 )
 from image_utils import delete_profile_image, process_profile_image
 from schemas import PaginatedPostsResponse, PostResponse, UserCreate, UserUpdate
+from security.auth import generate_reset_token, hash_reset_token
 from security.passwords import hash_password
 
 
@@ -219,3 +221,39 @@ async def get_user_by_id(db: AsyncSession, user_id: int) -> models.User | None:
     result = await db.execute(select(models.User).where(models.User.id == user_id))
 
     return result.scalars().one_or_none()
+
+
+async def create_reset_token_for_user(db: AsyncSession, user_id: int) -> str:
+    await db.execute(
+        delete(models.PasswordResetToken).where(
+            models.PasswordResetToken.user_id == user_id
+        )
+    )
+
+    token = generate_reset_token()
+    token_hash = hash_reset_token(token)
+    expires_at = datetime.now(UTC) + timedelta(
+        minutes=settings.reset_token_expire_minutes
+    )
+
+    reset_token = models.PasswordResetToken()
+    reset_token.user_id = user_id
+    reset_token.token_hash = token_hash
+    reset_token.expires_at = expires_at
+
+    db.add(reset_token)
+    await db.commit()
+
+    return token
+
+
+async def change_password(db: AsyncSession, user: models.User, new_password: str):
+    user.password_hash = hash_password(new_password)
+
+    await db.execute(
+        delete(models.PasswordResetToken).where(
+            models.PasswordResetToken.user_id == user.id,
+        ),
+    )
+
+    await db.commit()

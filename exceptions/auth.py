@@ -19,3 +19,9 @@ class IncorrectCredentialsError(AuthDomainError):
 class InvalidTokenError(AuthDomainError):
     def __init__(self, detail: str = "Could not validate credentials.") -> None:
         super().__init__(detail)
+    
+
+class InvalidResetTokenError(AuthDomainError):
+    http_status = 400
+    def __init__(self) -> None:
+        super().__init__("Invalid or expired reset token")

@@ -1,15 +1,25 @@
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
 from fastapi import Depends
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import models
 from config import settings
 from database import get_db
-from exceptions import IncorrectCredentialsError, InvalidTokenError
+from exceptions import (
+    IncorrectCredentialsError,
+    InvalidResetTokenError,
+    InvalidTokenError,
+)
 from schemas import Token
-from security.auth import create_access_token, oauth2_scheme, verify_access_token
+from security.auth import (
+    create_access_token,
+    hash_reset_token,
+    oauth2_scheme,
+    verify_access_token,
+)
 from security.passwords import verify_password
 from services import user_service
 
@@ -24,7 +34,7 @@ async def authenticate_user_and_create_token(
     if not user or not verify_password(password, user.password_hash):
         raise IncorrectCredentialsError(reason="Incorrect email or password")
 
-    expires_delta = timedelta(minutes=settings.access_token_expire_duration)
+    expires_delta = timedelta(minutes=settings.access_token_expire_minutes)
     access_token = create_access_token(
         data={"sub": str(user.id)}, expires_delta=expires_delta
     )
@@ -52,6 +62,30 @@ async def get_current_user(
         raise InvalidTokenError(detail="User not found")
 
     return user
+
+
+async def validate_reset_token(
+    db: AsyncSession, token: str
+) -> models.PasswordResetToken:
+    """Validates reset token and returns a PasswordResetToken object if successful. Throws an InvalidResetTokenError Exception otherwise."""
+    token_hash = hash_reset_token(token)
+
+    result = await db.execute(
+        select(models.PasswordResetToken).where(
+            models.PasswordResetToken.token_hash == token_hash,
+        ),
+    )
+    reset_token = result.scalars().one_or_none()
+
+    if not reset_token:
+        raise InvalidResetTokenError()
+
+    if reset_token.expires_at.replace(tzinfo=UTC) < datetime.now(UTC):
+        await db.delete(reset_token)
+        await db.commit()
+        raise InvalidResetTokenError()
+
+    return reset_token
 
 
 CurrentUser = Annotated[models.User, Depends(get_current_user)]

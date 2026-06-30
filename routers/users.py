@@ -1,12 +1,31 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    HTTPException,
+    Query,
+    UploadFile,
+    status,
+)
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import settings
 from database import get_db
-from schemas import PostResponse, Token, UserCreate, UserPrivate, UserPublic, UserUpdate
+from email_utils import send_password_reset_email
+from schemas import (
+    ChangePasswordRequest,
+    ForgotPasswordRequest,
+    PostResponse,
+    ResetPasswordRequest,
+    Token,
+    UserCreate,
+    UserPrivate,
+    UserPublic,
+    UserUpdate,
+)
 from services import auth_service, user_service
 from services.auth_service import CurrentUser
 
@@ -46,6 +65,70 @@ async def login(
 )
 async def get_current_user(current_user: CurrentUser):
     return current_user
+
+
+@router.post("/forgot-password", status_code=status.HTTP_202_ACCEPTED)
+async def forgot_password(
+    request_data: ForgotPasswordRequest,
+    background_tasks: BackgroundTasks,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    try:
+        user = await user_service.get_user_by_email(db, request_data.email)
+        if user:
+            token = await user_service.create_reset_token_for_user(db, user.id)
+            background_tasks.add_task(
+                send_password_reset_email,
+                to_email=user.email,
+                username=user.username,
+                token=token,
+            )
+    except Exception:
+        pass
+
+    return {
+        "message": "If an account with this email exists, you will receive password reset instructions."
+    }
+
+
+@router.post("/reset-password", status_code=status.HTTP_200_OK)
+async def reset_password(
+    request_data: ResetPasswordRequest,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    reset_token = await auth_service.validate_reset_token(db, request_data.token)
+
+    user = await user_service.get_user_by_id(db, reset_token.user_id)
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired reset token",
+        )
+
+    await user_service.change_password(db, user, request_data.new_password)
+
+    return {
+        "message": "Password reset successfully. You can now log in with your new password."
+    }
+
+
+@router.patch("/me/password", status_code=status.HTTP_200_OK)
+async def change_password(
+    password_data: ChangePasswordRequest,
+    current_user: CurrentUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    if not auth_service.verify_password(
+        password_data.current_password, current_user.password_hash
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current password is incorrect",
+        )
+
+    await user_service.change_password(db, current_user, password_data.new_password)
+    return {"message": "Password changed successfully"}
 
 
 @router.get(
