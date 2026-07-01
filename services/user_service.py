@@ -18,7 +18,7 @@ from exceptions import (
     UsernameTakenError,
     UserNotFoundError,
 )
-from image_utils import delete_profile_image, process_profile_image
+from utils.image_utils import delete_profile_image, process_profile_image
 from schemas import PaginatedPostsResponse, PostResponse, UserCreate, UserUpdate
 from security.auth import generate_reset_token, hash_reset_token
 from security.passwords import hash_password
